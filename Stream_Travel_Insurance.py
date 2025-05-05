@@ -5,7 +5,6 @@ from catboost import Pool
 
 # Load CatBoost model
 model = joblib.load(r"C:\Users\braid\Downloads\insurance_predict_model.pkl")
-
 expected_features = model.feature_names_
 
 st.set_page_config(page_title="Claim Prediction", layout="wide")
@@ -54,7 +53,7 @@ input_df = pd.DataFrame({
     'Profit': [profit]
 })
 
-# Map encoded features
+# ✅ Convert to numeric for these columns
 input_df['Agency Type'] = input_df['Agency Type'].map({'Travel Agency': 0, 'Airlines': 1})
 input_df['Distribution Channel'] = input_df['Distribution Channel'].map({'Online': 0, 'Offline': 1})
 
@@ -64,35 +63,41 @@ input_df['AgeGroup'] = pd.cut(input_df['Age'],
     labels=['Teen', 'Young Adult', 'Adult', 'Mid-Age', 'Senior']
 )
 
-# One-hot encode AgeGroup with drop_first=True
+# One-hot encode AgeGroup
 input_df = pd.get_dummies(input_df, columns=['AgeGroup'], drop_first=True)
 
-# Reindex to ensure all required columns are present
+# Reindex to match model's expected features
 input_df = input_df.reindex(columns=expected_features, fill_value=0)
 
-# Display the input data
+# Display user input
 st.subheader("User Input Summary")
 st.write("Here’s a snapshot of your selections:")
-
-# Convert input data to dataframe
-input_df = pd.DataFrame(input_df)
 st.dataframe(input_df)
 
-
-# Button to trigger prediction
+# Predict button
 if st.button("Predict"):
-    # Predict
+    # Only Agency + Product Name are categoricals
     cat_features = ['Agency', 'Product Name']
+
+    # Create CatBoost Pool
     input_pool = Pool(input_df, cat_features=cat_features)
-    prediction = model.predict(input_pool)[0]
-    prediction_prob = model.predict_proba(input_df)
 
+    # Get probability prediction
+    prob = model.predict(input_pool, prediction_type="Probability")[0]
+    prob_rejection, prob_approval = prob[0], prob[1]
 
-    # Display result
+    # Final class prediction
+    prediction = 'Yes' if prob_approval >= 0.5 else 'No'
+
+    # Display results
     st.subheader("Prediction Result:")
     if prediction == 'Yes':
-        st.success("✅ Claim is likely to be Approved.")
+        st.success(f"✅ Claim is likely to be Approved.")
     else:
-        st.error("🚨 Claim is likely to be Rejected — Possible Fraud or Invalid Submission.")
+        st.error(f"🚨 Claim is likely to be Rejected — Possible Fraud or Invalid Submission.")
 
-   
+    st.markdown(f"""
+    ### 🔢 Prediction Probabilities:
+    - ✅ **Approval:** {prob_approval:.2%}
+    - ❌ **Rejection:** {prob_rejection:.2%}
+    """)
